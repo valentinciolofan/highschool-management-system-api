@@ -24,7 +24,6 @@ app.use(cors({
   credentials: true
 }));
 
-knex.select('*').from('utilizatori').then(console.log);
 
 app.get('/', (req, res) => {
   res.json({
@@ -33,14 +32,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/shop', (req, res) => {
-  if (req.session.userId) {
-    res.send(`You are logged in as ${req.session.userId}`)
-  } else {
-    res.send(`You aren't logged in`);
-    
-  }
-});
+
 
 app.get('/test-session', (req, res) => {
   if (req.session.views) {
@@ -89,12 +81,11 @@ app.get('/profile', (req, res) => {
 
 
 app.post('/register', async (req, res) => {
-  const { name, prenume, cnp, email, password } = req.body;
+  const { firstName, lastName, cnp, email, password, address } = req.body;
 
+    console.log(firstName, lastName, cnp, email, password, address);
   const salt = 10;
   const hash = bcrypt.hashSync(password, salt);
-
- 
 
   const newUser = knex
     .transaction(trx => {
@@ -107,13 +98,11 @@ app.post('/register', async (req, res) => {
         .then(res => {
           return trx
             .insert({
-              nume: name,
-              prenume: prenume,
+              nume: lastName,
+              prenume: firstName,
               datanasterii: new Date(),
               cnp: cnp,
-              adresa: "idk",
-              prenumetata: "lala",
-              prenumemama: "elsa",
+              adresa: address,
               email: res[0].email,
               // joined: new Date()
             }, '*')
@@ -131,4 +120,48 @@ app.post('/register', async (req, res) => {
   });
 });
 
+
+app.get('/check-session', async (req, res) => {
+
+})
+
+//NOTE PLUS PREZENTE JOINED
+
+
+// knex
+//     .select('*')
+//     .from('elevi')
+//     .where('nume', '=', 'Marin')
+//     .leftJoin('note', 'elevi.nrmatricol', 'note.notaid')
+//     .leftJoin('prezente', 'elevi.nrmatricol', 'prezente.prezentaid').then(console.log)
+  
+
+// total number of students
+// knex('elevi').count('nrmatricol').then(console.log);
+
+// total number of professors
+// knex('profesori').count('profesorid').then(console.log);
+
+
+
+
 app.listen(port);
+
+/*
+CHECK NR OF PARENTS
+CHECK NR OF STUDENTS
+CHECK NR OF PROFESSORS
+CHECK STUDENTS FROM A PARTICULAR CLASS
+*/
+
+// all parents number
+    // Promise.all([
+    //     knex('elevi').whereNotNull('prenumemama').whereNot('prenumemama', '').count('* as countMama'),
+    //     knex('elevi').whereNotNull('prenumetata').whereNot('prenumetata', '').count('* as countTata')
+    //   ]).then(([countMama, countTata]) => {
+    //      const totalParents = Number(countTata[0].countTata) + Number(countMama[0].countMama);
+    //      console.log(totalParents);
+    //   }).catch(error => {
+    //     console.error('Error:', error);
+    //   });
+      
