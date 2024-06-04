@@ -47,7 +47,7 @@ app.get('/test-session', (req, res) => {
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-     knex
+    knex
       .select('*')
       .from('utilizatori')
       .where('email', '=', email)
@@ -76,14 +76,14 @@ app.get('/profile', (req, res) => {
     "userId": req.session.userId,
     "userSessionId": req.session.id
   });
-  
+
 });
 
 
 app.post('/register', async (req, res) => {
   const { firstName, lastName, cnp, email, password, address } = req.body;
 
-    console.log(firstName, lastName, cnp, email, password, address);
+  console.log(firstName, lastName, cnp, email, password, address);
   const salt = 10;
   const hash = bcrypt.hashSync(password, salt);
 
@@ -114,7 +114,7 @@ app.post('/register', async (req, res) => {
     .catch(err => {
       console.log('Error:' + err);
     });
-    
+
   newUser.then(user => {
     res.send(user[0]);
   });
@@ -123,6 +123,34 @@ app.post('/register', async (req, res) => {
 
 app.get('/check-session', async (req, res) => {
 
+})
+
+app.get('/stats', async (req, res) => {
+  knex.raw(`
+  SELECT
+    (SELECT COUNT(*) FROM elevi) AS total_students,
+    (SELECT COUNT(*) FROM profesori) AS total_professors,
+    (SELECT COUNT(*)
+     FROM elevi
+     WHERE prenumemama IS NOT NULL AND prenumemama <> '') AS count_mothers,
+    (SELECT COUNT(*)
+     FROM elevi
+     WHERE prenumetata IS NOT NULL AND prenumetata <> '') AS count_fathers
+`)
+    .then(data => {
+      res.send(data.rows);
+    })
+    .catch(error => {
+      console.error("Error:", error);
+    });
+})
+app.get('/students', async (req, res) => {
+  knex
+    .select('*')
+    .from('elevi')
+    .then(students => {
+      res.json(students);
+    })
 })
 
 //NOTE PLUS PREZENTE JOINED
@@ -134,7 +162,7 @@ app.get('/check-session', async (req, res) => {
 //     .where('nume', '=', 'Marin')
 //     .leftJoin('note', 'elevi.nrmatricol', 'note.notaid')
 //     .leftJoin('prezente', 'elevi.nrmatricol', 'prezente.prezentaid').then(console.log)
-  
+
 
 // total number of students
 // knex('elevi').count('nrmatricol').then(console.log);
@@ -155,13 +183,13 @@ CHECK STUDENTS FROM A PARTICULAR CLASS
 */
 
 // all parents number
-    // Promise.all([
-    //     knex('elevi').whereNotNull('prenumemama').whereNot('prenumemama', '').count('* as countMama'),
-    //     knex('elevi').whereNotNull('prenumetata').whereNot('prenumetata', '').count('* as countTata')
-    //   ]).then(([countMama, countTata]) => {
-    //      const totalParents = Number(countTata[0].countTata) + Number(countMama[0].countMama);
-    //      console.log(totalParents);
-    //   }).catch(error => {
-    //     console.error('Error:', error);
-    //   });
-      
+// Promise.all([
+//     knex('elevi').whereNotNull('prenumemama').whereNot('prenumemama', '').count('* as countMama'),
+//     knex('elevi').whereNotNull('prenumetata').whereNot('prenumetata', '').count('* as countTata')
+//   ]).then(([countMama, countTata]) => {
+//      const totalParents = Number(countTata[0].countTata) + Number(countMama[0].countMama);
+//      console.log(totalParents);
+//   }).catch(error => {
+//     console.error('Error:', error);
+//   });
+
