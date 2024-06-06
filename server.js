@@ -10,22 +10,28 @@ const port = 3000;
 
 
 
-app.use(session({
-  secret: 'your_secret_key', // A secret key for session encoding
-  httpOnly: false,
-  resave: false,              // Forces the session to be saved back to the session store
-  saveUninitialized: true,    // Forces a session that is "uninitialized" to be saved to the store
-  cookie: { maxAge: 3600000, secure: false }   // Note: secure: true should be used in production with HTTPS
-}));
-
 app.use(express.json());
 app.use(cors({
   origin: 'http://localhost:5173',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE']
+}));
+
+app.use(session({
+  secret: 'your_secret_key', // A secret key for session encoding
+  resave: false,              // Forces the session to be saved back to the session store
+  saveUninitialized: true,    // Forces a session that is "uninitialized" to be saved to the store
+  cookie: { 
+    maxAge: 3600000, 
+    secure: process.env.NODE_ENV === 'production' ,
+    httpOnly: true,
+    sameSite: 'Lax'
+  }   
 }));
 
 
 app.get('/', (req, res) => {
+  console.log(req.session);
   res.json({
     "userId": req.session.userId,
     "userSessionId": req.session.id
@@ -33,19 +39,17 @@ app.get('/', (req, res) => {
 });
 
 
-
 app.get('/test-session', (req, res) => {
   if (req.session.views) {
     req.session.views++;
   } else {
     req.session.views = 1;
-
   }
   res.status(200).send(`Hello, Views: ${req.session.views}`);
 });
 
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, remember } = req.body;
   try {
     knex
       .select('*')
@@ -57,6 +61,14 @@ app.post('/login', async (req, res) => {
         }).then(isValid => {
           if (isValid) {
             req.session.userId = response[0].id;
+            req.session.userEmail = response[0].email;
+            console.log(req.session.userEmail);
+            if (remember) {
+              req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+            } else {
+              req.session.cookie.maxAge = 3600000;
+            }
+
             return res.status(200).json({ message: 'Logged in!', redirect: '/shop' });
 
           }
@@ -83,7 +95,7 @@ app.get('/profile', (req, res) => {
 app.post('/register', async (req, res) => {
   const { firstName, lastName, cnp, email, password, address } = req.body;
   const randomMatricol = Math.floor(Math.random() * 100);
-  console.log(firstName, lastName, cnp, email, password, address);
+  // console.log(firstName, lastName, cnp, email, password, address);
   const salt = 10;
   const hash = bcrypt.hashSync(password, salt);
 
@@ -120,9 +132,23 @@ app.post('/register', async (req, res) => {
     res.send(user[0]);
   });
 });
-app.get('/check-session', async (req, res) => {
+app.get('/check-session', (req, res) => {
+  if (req.session && req.session.userEmail) {
 
-})
+    knex.select('*')
+      .from('utilizatori')
+      .where('email', '=', req.session.userEmail)
+      .then(response => {
+        res.json({"loggedIn": true, "status": 200,"userInfo": response[0] });
+      })
+      .catch(err => {
+        console.error(err);
+        res.status(500).send('Something went wrong..');
+      });
+  } else {
+    res.status(401).json({"loggedIn": false, "status": 401});
+  }
+});
 
 app.get('/stats', async (req, res) => {
   knex.raw(`
@@ -165,7 +191,6 @@ app.get('/exams', async (req, res) => {
     .groupBy('clase.clasaid', 'exams.clasaid', 'exams.exam_id')
     .then(rows => {
       res.send(rows);
-      console.log(rows);
     })
 
 
