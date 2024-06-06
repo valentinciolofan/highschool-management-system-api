@@ -82,7 +82,7 @@ app.get('/profile', (req, res) => {
 
 app.post('/register', async (req, res) => {
   const { firstName, lastName, cnp, email, password, address } = req.body;
-
+  const randomMatricol = Math.floor(Math.random() * 100);
   console.log(firstName, lastName, cnp, email, password, address);
   const salt = 10;
   const hash = bcrypt.hashSync(password, salt);
@@ -98,6 +98,7 @@ app.post('/register', async (req, res) => {
         .then(res => {
           return trx
             .insert({
+              nrmatricol: `MAT${randomMatricol}`,
               nume: lastName,
               prenume: firstName,
               datanasterii: new Date(),
@@ -119,8 +120,6 @@ app.post('/register', async (req, res) => {
     res.send(user[0]);
   });
 });
-
-
 app.get('/check-session', async (req, res) => {
 
 })
@@ -145,16 +144,32 @@ app.get('/stats', async (req, res) => {
     });
 })
 app.get('/students', async (req, res) => {
-  knex
-    .select('*')
-    .from('elevi')
-    .then(students => {
-      res.json(students);
-    })
+  knex('elevi')
+  .select('*')  // Selects all columns; modify to specify columns if needed to avoid ambiguity or to improve performance
+  .join('clase', 'clase.clasaid', 'elevi.clasaid')  // Joins the 'clase' table
+  .join('note', 'note.nrmatricol', 'elevi.nrmatricol')  // Joins the 'note' table
+  .join('prezente', 'prezente.nrmatricol', 'elevi.nrmatricol')  // Joins the 'prezente' table
+  .groupBy('prezente.prezentaid', 'prezente.nrmatricol', 'elevi.nrmatricol', 'note.notaid', 'clase.clasaid')  // Group by these columns
+  .then(rows => {
+    res.send(rows);
+  })
+  .catch(error => {
+    console.error(error);
+  });
 })
 
-//NOTE PLUS PREZENTE JOINED
+app.get('/exams', async (req, res) => {
+  knex('exams')
+    .select('*')
+    .join('clase', 'clase.clasaid', 'exams.clasaid')
+    .groupBy('clase.clasaid', 'exams.clasaid', 'exams.exam_id')
+    .then(rows => {
+      res.send(rows);
+      console.log(rows);
+    })
 
+
+})
 
 // knex
 //     .select('*')
