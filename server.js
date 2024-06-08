@@ -21,12 +21,12 @@ app.use(session({
   secret: 'your_secret_key', // A secret key for session encoding
   resave: false,              // Forces the session to be saved back to the session store
   saveUninitialized: true,    // Forces a session that is "uninitialized" to be saved to the store
-  cookie: { 
-    maxAge: 3600000, 
-    secure: process.env.NODE_ENV === 'production' ,
+  cookie: {
+    maxAge: 3600000,
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'Lax'
-  }   
+  }
 }));
 
 
@@ -60,16 +60,16 @@ app.post('/login', async (req, res) => {
           return result;
         }).then(isValid => {
           if (isValid) {
-            req.session.userId = response[0].id;
+            req.session.userId = response[0].id_utilizator;
             req.session.userEmail = response[0].email;
-            console.log(req.session.userEmail);
+            req.session.calitate = response[0].calitate;
             if (remember) {
               req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
             } else {
               req.session.cookie.maxAge = 3600000;
             }
 
-            return res.status(200).json({ message: 'Logged in!', redirect: '/shop' });
+            return res.status(200).json({ message: 'Logged in!' });
 
           }
           res.status(401).send('User or password could be wrong. Try again!');
@@ -133,20 +133,44 @@ app.post('/register', async (req, res) => {
   });
 });
 app.get('/check-session', (req, res) => {
+  console.log(req.session);
   if (req.session && req.session.userEmail) {
-
     knex.select('*')
       .from('utilizatori')
       .where('email', '=', req.session.userEmail)
       .then(response => {
-        res.json({"loggedIn": true, "status": 200,"userInfo": response[0] });
+        if (response[0].calitate === 'elev') {
+          knex.select('*')
+            .from('elevi')
+            .where('email', '=', response[0].email)
+            .then(userInfo => {
+              userInfo[0].calitate = response[0].calitate;
+              res.json({ "loggedIn": true, "status": 200, "userInfo": userInfo });
+            });
+        }
+        else if (response[0].calitate === 'profesor') {
+          knex.select('*')
+            .from('profesori')
+            .where('email', '=', response[0].email)
+            .then(userInfo => {
+              userInfo[0].calitate = response[0].calitate;
+              console.log(userInfo);
+              res.json({ "loggedIn": true, "status": 200, "userInfo": userInfo });
+            });
+        }
+        else if (response[0].calitate === 'secretar') {
+          res.json({ "loggedIn": true, "status": 200, "userInfo": response[0] });
+        }
+        else if (response[0].calitate === 'admin') {
+          res.json({ "loggedIn": true, "status": 200, "userInfo": response[0] });
+        }
       })
       .catch(err => {
         console.error(err);
         res.status(500).send('Something went wrong..');
       });
   } else {
-    res.status(401).json({"loggedIn": false, "status": 401});
+    res.status(401).json({ "loggedIn": false, "status": 401 });
   }
 });
 
@@ -171,17 +195,17 @@ app.get('/stats', async (req, res) => {
 })
 app.get('/students', async (req, res) => {
   knex('elevi')
-  .select('*')  // Selects all columns; modify to specify columns if needed to avoid ambiguity or to improve performance
-  .join('clase', 'clase.clasaid', 'elevi.clasaid')  // Joins the 'clase' table
-  .join('note', 'note.nrmatricol', 'elevi.nrmatricol')  // Joins the 'note' table
-  .join('prezente', 'prezente.nrmatricol', 'elevi.nrmatricol')  // Joins the 'prezente' table
-  .groupBy('prezente.prezentaid', 'prezente.nrmatricol', 'elevi.nrmatricol', 'note.notaid', 'clase.clasaid')  // Group by these columns
-  .then(rows => {
-    res.send(rows);
-  })
-  .catch(error => {
-    console.error(error);
-  });
+    .select('*')  // Selects all columns; modify to specify columns if needed to avoid ambiguity or to improve performance
+    .join('clase', 'clase.clasaid', 'elevi.clasaid')  // Joins the 'clase' table
+    .join('note', 'note.nrmatricol', 'elevi.nrmatricol')  // Joins the 'note' table
+    .join('prezente', 'prezente.nrmatricol', 'elevi.nrmatricol')  // Joins the 'prezente' table
+    .groupBy('prezente.prezentaid', 'prezente.nrmatricol', 'elevi.nrmatricol', 'note.notaid', 'clase.clasaid')  // Group by these columns
+    .then(rows => {
+      res.send(rows);
+    })
+    .catch(error => {
+      console.error(error);
+    });
 })
 
 app.get('/exams', async (req, res) => {
