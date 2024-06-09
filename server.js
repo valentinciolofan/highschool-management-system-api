@@ -18,9 +18,9 @@ app.use(cors({
 }));
 
 app.use(session({
-  secret: 'your_secret_key', // A secret key for session encoding
-  resave: false,              // Forces the session to be saved back to the session store
-  saveUninitialized: true,    // Forces a session that is "uninitialized" to be saved to the store
+  secret: 'your_secret_key', 
+  resave: false,              
+  saveUninitialized: true,    
   cookie: {
     maxAge: 3600000,
     secure: process.env.NODE_ENV === 'production',
@@ -29,6 +29,17 @@ app.use(session({
   }
 }));
 
+const logOperation = async (idutz, operatiune) => {
+  try {
+    await knex('jurnalizare').insert({
+      idutz,
+      operatiune,
+      dataora: new Date()
+    });
+  } catch (error) {
+    console.error('Error logging operation:', error);
+  }
+};
 
 app.get('/', (req, res) => {
   console.log(req.session);
@@ -36,6 +47,7 @@ app.get('/', (req, res) => {
     "userId": req.session.userId,
     "userSessionId": req.session.id
   });
+  logOperation(req.session.userId, 'accesare dashboard');
 });
 
 
@@ -63,6 +75,9 @@ app.post('/login', async (req, res) => {
             req.session.userId = response[0].id_utilizator;
             req.session.userEmail = response[0].email;
             req.session.calitate = response[0].calitate;
+
+            logOperation(response[0].id_utilizator, 'logare in aplicatie');
+
             if (remember) {
               req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
             } else {
@@ -70,7 +85,6 @@ app.post('/login', async (req, res) => {
             }
 
             return res.status(200).json({ message: 'Logged in!' });
-
           }
           res.status(401).send('User or password could be wrong. Try again!');
         });
@@ -80,6 +94,17 @@ app.post('/login', async (req, res) => {
   }
 });
 
+app.post('/logout', (req, res) => {
+  const userId = req.session.userId;
+  req.session.destroy(err => {
+    if (err) {
+      return res.status(500).send('Could not log out.');
+    } else {
+      logOperation(userId, 'deconectare din aplicatie');
+      return res.status(200).send('Logged out.');
+    }
+  });
+});
 
 
 app.get('/profile', (req, res) => {
@@ -95,7 +120,6 @@ app.get('/profile', (req, res) => {
 app.post('/register', async (req, res) => {
   const { firstName, lastName, cnp, email, password, address } = req.body;
   const randomMatricol = Math.floor(Math.random() * 100);
-  // console.log(firstName, lastName, cnp, email, password, address);
   const salt = 10;
   const hash = bcrypt.hashSync(password, salt);
 
@@ -106,8 +130,9 @@ app.post('/register', async (req, res) => {
         .insert({
           hash: hash,
           email: email
-        }, "email")
+        }, "id")
         .then(res => {
+          const userId = res[0].id;
           return trx
             .insert({
               nrmatricol: `MAT${randomMatricol}`,
@@ -116,10 +141,12 @@ app.post('/register', async (req, res) => {
               datanasterii: new Date(),
               cnp: cnp,
               adresa: address,
-              email: res[0].email,
-              // joined: new Date()
+              email: email,
             }, '*')
             .into('elevi')
+            .then(() => {
+              logOperation(userId, 'adaugare utilizator nou');
+            });
         })
         .then(trx.commit)
         .catch(trx.rollback)
@@ -127,13 +154,14 @@ app.post('/register', async (req, res) => {
     .catch(err => {
       console.log('Error:' + err);
     });
-
   newUser.then(user => {
     res.send(user[0]);
   });
 });
+
 app.get('/check-session', (req, res) => {
   console.log(req.session);
+
   if (req.session && req.session.userEmail) {
     knex.select('*')
       .from('utilizatori')
@@ -173,7 +201,6 @@ app.get('/check-session', (req, res) => {
     res.status(401).json({ "loggedIn": false, "status": 401 });
   }
 });
-
 app.get('/stats', async (req, res) => {
   knex.raw(`
   SELECT
@@ -194,19 +221,34 @@ app.get('/stats', async (req, res) => {
     });
 })
 app.get('/students', async (req, res) => {
-  knex('elevi')
-    .select('*')  // Selects all columns; modify to specify columns if needed to avoid ambiguity or to improve performance
-    .join('clase', 'clase.clasaid', 'elevi.clasaid')  // Joins the 'clase' table
-    .join('note', 'note.nrmatricol', 'elevi.nrmatricol')  // Joins the 'note' table
-    .join('prezente', 'prezente.nrmatricol', 'elevi.nrmatricol')  // Joins the 'prezente' table
-    .groupBy('prezente.prezentaid', 'prezente.nrmatricol', 'elevi.nrmatricol', 'note.notaid', 'clase.clasaid')  // Group by these columns
-    .then(rows => {
-      res.send(rows);
-    })
-    .catch(error => {
-      console.error(error);
-    });
-})
+  try {
+    const rows = await knex('elevi')
+      .select(
+        'elevi.*', 
+        'clase.denclasa', 
+        'note.nota', 
+        'discipline.dendisciplina', 
+        'prezente.status'
+      )
+      .join('clase', 'clase.clasaid', 'elevi.clasaid')
+      .join('note', 'note.nrmatricol', 'elevi.nrmatricol')
+      .join('discipline', 'discipline.disciplinaid', 'note.disciplinaid')
+      .join('prezente', 'prezente.nrmatricol', 'elevi.nrmatricol')
+      .groupBy(
+        'elevi.nrmatricol', 
+        'clase.clasaid', 
+        'note.notaid', 
+        'discipline.disciplinaid', 
+        'prezente.prezentaid'
+      );
+      logOperation(req.session.userId, 'accesare date elevi');
+    
+    res.send(rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
 
 app.get('/exams', async (req, res) => {
   knex('exams')
@@ -215,8 +257,9 @@ app.get('/exams', async (req, res) => {
     .groupBy('clase.clasaid', 'exams.clasaid', 'exams.exam_id')
     .then(rows => {
       res.send(rows);
-    })
+    logOperation(req.session.userId, 'accesare examene');
 
+    })
 
 })
 
